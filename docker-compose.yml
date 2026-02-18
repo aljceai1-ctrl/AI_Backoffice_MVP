@@ -1,0 +1,69 @@
+# docker-compose.yml
+# No `version:` key — it is obsolete in Compose v2 and triggers a warning.
+# Docker Compose reads .env automatically for ${VAR} substitution below.
+
+services:
+
+  # ── Primary database ─────────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: backoffice
+      POSTGRES_PASSWORD: backoffice
+      POSTGRES_DB: backoffice
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backoffice -d backoffice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── Test-only database (used by pytest) ──────────────────────────────────
+  db_test:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: backoffice
+      POSTGRES_PASSWORD: backoffice
+      POSTGRES_DB: backoffice_test
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U backoffice -d backoffice_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # ── Application ──────────────────────────────────────────────────────────
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+      db_test:
+        condition: service_healthy
+    environment:
+      # Docker-internal URLs (override anything from .env on host)
+      DATABASE_URL: postgresql://backoffice:backoffice@db:5432/backoffice
+      TEST_DATABASE_URL: postgresql://backoffice:backoffice@db_test:5432/backoffice_test
+      UPLOAD_DIR: /app/data/uploads
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Reads BACKOFFICE_API_KEY from .env (Compose auto-loads .env for substitution).
+      # Fallback to the dev default so the container still starts without .env.
+      BACKOFFICE_API_KEY: ${BACKOFFICE_API_KEY:-dev-api-key-change-me}
+      ALLOWED_CURRENCIES: '["AED","USD","EUR"]'
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data   # persist uploads between container rebuilds
+      - .:/app             # live-reload: code changes apply without rebuild
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+volumes:
+  pgdata:
