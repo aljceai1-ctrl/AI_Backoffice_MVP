@@ -51,6 +51,8 @@ Expected outcome after `make test`:
 
 ## Make targets
 
+**Service lifecycle**
+
 | Command | What it does |
 |---------|-------------|
 | `make up` | `docker compose up -d --build` |
@@ -60,6 +62,62 @@ Expected outcome after `make test`:
 | `make down` | `docker compose down -v` (removes containers **and** volumes) |
 | `make shell` | bash shell inside the app container |
 | `make psql` | psql inside the db container |
+
+**Code quality**
+
+| Command | What it does |
+|---------|-------------|
+| `make lint` | `ruff check .` — show all violations |
+| `make format` | `ruff format .` — auto-fix formatting in place |
+| `make format-check` | `ruff format --check .` — fail if formatting differs (used in CI) |
+| `make type` | `mypy app/` — static type analysis |
+| `make pytest` | `pytest -q --tb=short` — unit/integration suite (needs db_test on :5433) |
+| `make ci` | Full local CI gate: lint + format-check + type + pytest |
+| `make install-dev` | `pip install -r requirements-dev.txt` |
+| `make pre-commit-install` | Install git hooks via pre-commit |
+
+---
+
+## Developer workflow
+
+**One-time setup** (after cloning):
+
+```bash
+pip install -r requirements.txt -r requirements-dev.txt
+# or just:
+make install-dev
+
+make pre-commit-install   # installs ruff lint/format as git pre-commit hooks
+```
+
+**Before every commit** — the pre-commit hooks run automatically, but you can
+also run them manually:
+
+```bash
+make format    # auto-fix any formatting issues
+make lint      # check for remaining violations (should be zero after format)
+```
+
+**Full local CI gate** — mirrors what GitHub Actions runs:
+
+```bash
+make ci        # lint + format-check + type + pytest
+```
+
+**Individual checks:**
+
+```bash
+make lint          # ruff lint only
+make type          # mypy only
+make pytest        # pytest only
+```
+
+**GitHub Actions** runs automatically on every push and pull request targeting
+`main`. The workflow is at `.github/workflows/ci.yml` and has three jobs:
+
+- **quality** — ruff lint, ruff format check, mypy (runs first, fast feedback)
+- **tests** — pytest against a real Postgres service container (runs after quality)
+- **docker** — `docker build` smoke-test to catch Dockerfile breakage (runs after quality)
 
 ---
 
@@ -208,6 +266,9 @@ make test          # verify everything works
 
 ```
 AI_Backoffice_MVP/
+├── .github/
+│   └── workflows/
+│       └── ci.yml           GitHub Actions: quality + tests + docker-build
 ├── app/
 │   ├── main.py              FastAPI app, lifespan, error handlers
 │   ├── core/                settings, auth, logging, middleware
@@ -225,10 +286,13 @@ AI_Backoffice_MVP/
 │   ├── bootstrap.sh         all-in-one first-run helper
 │   └── reset_db.sh          drop + recreate schema (dev only)
 ├── data/uploads/            invoice file storage (gitignored)
+├── .pre-commit-config.yaml  ruff lint + format hooks
 ├── Makefile
 ├── docker-compose.yml
 ├── Dockerfile
-├── requirements.txt
+├── pyproject.toml           ruff, mypy, pytest config
+├── requirements.txt         runtime dependencies
+├── requirements-dev.txt     ruff, mypy, pre-commit (CI / dev only)
 └── .env.example
 ```
 
@@ -237,17 +301,24 @@ LLM/OCR extraction. See that file for instructions.
 
 ---
 
-## Running pytest (optional)
+## Running pytest
 
 The pytest suite uses a separate Postgres instance on port 5433 (`db_test`).
-Both database containers must be running:
+Both containers must be running (started by `make up`).
+
+**Simplest — run inside the container (no local Python needed):**
 
 ```bash
 make up    # starts both db and db_test
+docker compose exec app pytest tests/ -v
+```
 
-docker compose exec \
-  -e TEST_DATABASE_URL="postgresql://backoffice:backoffice@db_test:5432/backoffice_test" \
-  app pytest tests/ -v
+**Local — run on your machine (needs `db_test` container):**
+
+```bash
+make up                     # ensures db_test is available on :5433
+pip install -r requirements.txt -r requirements-dev.txt
+make pytest                 # pytest -q --tb=short
 ```
 
 ---

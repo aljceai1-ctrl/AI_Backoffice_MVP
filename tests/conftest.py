@@ -2,7 +2,6 @@
 
 import io
 import os
-import tempfile
 from typing import Generator
 
 import pytest

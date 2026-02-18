@@ -1,5 +1,6 @@
 """Export endpoints — payment pack CSV and weekly Markdown report."""
 
+import uuid
 from datetime import date
 from typing import Annotated
 
@@ -40,8 +41,7 @@ async def payment_pack(
     csv_content, row_count = generate_payment_pack(db, from_date, to_date)
 
     # Audit the export action
-    import uuid as _uuid
-    export_id = _uuid.uuid4()
+    export_id = uuid.uuid4()
     record_event(
         db,
         event_type="PAYMENT_PACK_EXPORTED",
@@ -77,8 +77,7 @@ async def weekly_pack(
     """
     md_content = generate_weekly_pack(db, week_start)
 
-    import uuid as _uuid
-    report_id = _uuid.uuid4()
+    report_id = uuid.uuid4()
     record_event(
         db,
         event_type="WEEKLY_PACK_GENERATED",

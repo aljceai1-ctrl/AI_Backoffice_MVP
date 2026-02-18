@@ -1,0 +1,29 @@
+# =============================================================================
+# AI Backoffice MVP — pre-commit hooks
+#
+# Install once with:  make pre-commit-install   (or: pre-commit install)
+# Run manually with:  pre-commit run --all-files
+# Update hook revs:   pre-commit autoupdate
+# =============================================================================
+
+repos:
+  # ── ruff: lint + auto-fix ──────────────────────────────────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.5
+    hooks:
+      # Lint — auto-fix safe violations before committing.
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Format — reformat code in place before committing.
+      - id: ruff-format
+
+  # ── built-in sanity checks ─────────────────────────────────────────────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: debug-statements       # catch accidental breakpoint() / pdb.set_trace()

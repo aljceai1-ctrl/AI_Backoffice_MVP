@@ -1,0 +1,124 @@
+# =============================================================================
+# AI Backoffice MVP — CI Pipeline
+#
+# Jobs:
+#   quality   → ruff lint + ruff format check + mypy type check
+#   tests     → pytest against a real Postgres instance
+#   docker    → docker build (no push) to catch Dockerfile breakage early
+#
+# Runs on every push and every PR targeting main / master.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: ["main", "master"]
+  pull_request:
+    branches: ["main", "master"]
+
+# Cancel in-flight runs for the same branch when a new push arrives.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ── Shared Python version ─────────────────────────────────────────────────────
+env:
+  PYTHON_VERSION: "3.12"
+
+# =============================================================================
+# Job 1 — Code quality (ruff + mypy)
+# =============================================================================
+jobs:
+  quality:
+    name: Quality (ruff + mypy)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install dev dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: ruff — lint
+        run: ruff check .
+
+      - name: ruff — format check
+        run: ruff format --check .
+
+      - name: mypy — type check
+        run: mypy app/
+
+# =============================================================================
+# Job 2 — Tests (pytest against real Postgres)
+# =============================================================================
+  tests:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    needs: quality           # skip expensive DB spin-up if linting already fails
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: backoffice
+          POSTGRES_PASSWORD: backoffice
+          POSTGRES_DB: backoffice_test
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd "pg_isready -U backoffice -d backoffice_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      DATABASE_URL: postgresql://backoffice:backoffice@localhost:5432/backoffice
+      TEST_DATABASE_URL: postgresql://backoffice:backoffice@localhost:5433/backoffice_test
+      BACKOFFICE_API_KEY: ci-test-key
+      UPLOAD_DIR: /tmp/backoffice_uploads
+      LOG_LEVEL: WARNING
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install all dependencies
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Create upload directory
+        run: mkdir -p /tmp/backoffice_uploads
+
+      - name: Run pytest
+        run: pytest -q --tb=short
+
+# =============================================================================
+# Job 3 — Docker build smoke-test (no push)
+# =============================================================================
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    needs: quality           # no point building the image if code quality fails
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --tag ai-backoffice-mvp:ci .
