@@ -3,7 +3,7 @@
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from app.schemas.approval import ApprovalResponse
 from app.schemas.common import ORMBase
@@ -38,11 +38,11 @@ class InvoiceResponse(ORMBase):
     amount: Optional[Decimal]
     currency: Optional[str]
     status: str
-    extracted_json: Optional[Dict[str, Any]]
+    extracted_json: Optional[dict[str, Any]]
 
 
 class InvoiceDetail(InvoiceResponse):
     """Extended invoice view including related exceptions and approvals."""
 
-    exceptions: List[ExceptionResponse] = []
-    approvals: List[ApprovalResponse] = []
+    exceptions: list[ExceptionResponse] = []
+    approvals: list[ApprovalResponse] = []

@@ -7,8 +7,7 @@ no autopay or payment execution is performed or triggered.
 import csv
 import io
 import logging
-from datetime import date, datetime, timezone
-from typing import Tuple
+from datetime import UTC, date, datetime
 
 from sqlalchemy.orm import Session
 
@@ -30,7 +29,7 @@ def generate_payment_pack(
     db: Session,
     from_date: date,
     to_date: date,
-) -> Tuple[str, int]:
+) -> tuple[str, int]:
     """Build a CSV string of APPROVED invoices created within the date range.
 
     The date range is inclusive and filters on ``invoices.created_at`` (UTC).
@@ -43,8 +42,8 @@ def generate_payment_pack(
     Returns:
         Tuple of (csv_content_string, row_count).
     """
-    from_dt = datetime(from_date.year, from_date.month, from_date.day, tzinfo=timezone.utc)
-    to_dt = datetime(to_date.year, to_date.month, to_date.day, 23, 59, 59, tzinfo=timezone.utc)
+    from_dt = datetime(from_date.year, from_date.month, from_date.day, tzinfo=UTC)
+    to_dt = datetime(to_date.year, to_date.month, to_date.day, 23, 59, 59, tzinfo=UTC)
 
     invoices = (
         db.query(Invoice)

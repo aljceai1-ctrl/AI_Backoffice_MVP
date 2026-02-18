@@ -1,7 +1,7 @@
 """Invoice exception ORM model."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
@@ -27,7 +27,7 @@ class InvoiceException(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     invoice_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),

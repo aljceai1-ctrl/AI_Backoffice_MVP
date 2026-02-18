@@ -1,7 +1,6 @@
 """Application settings loaded from environment variables / .env file."""
 
 from functools import lru_cache
-from typing import List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -31,7 +30,7 @@ class Settings(BaseSettings):
     UPLOAD_DIR: str = "./data/uploads"
 
     # Business rules
-    ALLOWED_CURRENCIES: List[str] = ["AED", "USD", "EUR"]
+    ALLOWED_CURRENCIES: list[str] = ["AED", "USD", "EUR"]
 
     # Observability
     LOG_LEVEL: str = "INFO"

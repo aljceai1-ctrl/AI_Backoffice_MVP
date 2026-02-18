@@ -1,7 +1,7 @@
 """Approval service — processes human approve/reject decisions."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
@@ -29,7 +29,7 @@ def process_approval(
         The flushed Approval record.
     """
     decision = req.decision.upper()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     approval = Approval(
         invoice_id=invoice.id,

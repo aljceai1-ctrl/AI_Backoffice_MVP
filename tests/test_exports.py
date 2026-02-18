@@ -123,5 +123,5 @@ def test_weekly_pack_creates_audit_event(client, auth_headers, upload_dir):
 
 
 def test_weekly_pack_requires_auth(client, upload_dir):
-    resp = client.get(f"/weekly-pack.md?week_start=2024-01-01")
+    resp = client.get("/weekly-pack.md?week_start=2024-01-01")
     assert resp.status_code == 401

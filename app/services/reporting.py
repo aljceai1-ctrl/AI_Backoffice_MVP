@@ -1,8 +1,7 @@
 """Reporting service — generates the weekly finance ops pack in Markdown."""
 
 import logging
-from datetime import date, datetime, timedelta, timezone
-from typing import Dict
+from datetime import UTC, date, datetime, timedelta
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -12,7 +11,7 @@ from app.models.invoice import Invoice
 
 logger = logging.getLogger(__name__)
 
-_STATUS_LABELS: Dict[str, str] = {
+_STATUS_LABELS: dict[str, str] = {
     "NEW": "Received (New)",
     "EXTRACTED": "Extracted",
     "VALIDATED": "Validated",
@@ -35,12 +34,12 @@ def generate_weekly_pack(db: Session, week_start: date) -> str:
         Markdown string suitable for direct rendering or email.
     """
     week_end = week_start + timedelta(days=6)
-    from_dt = datetime(week_start.year, week_start.month, week_start.day, tzinfo=timezone.utc)
-    to_dt = datetime(week_end.year, week_end.month, week_end.day, 23, 59, 59, tzinfo=timezone.utc)
-    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    from_dt = datetime(week_start.year, week_start.month, week_start.day, tzinfo=UTC)
+    to_dt = datetime(week_end.year, week_end.month, week_end.day, 23, 59, 59, tzinfo=UTC)
+    generated_at = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
 
     # ── 1. Status counts ─────────────────────────────────────────────────────
-    status_counts: Dict[str, int] = {s: 0 for s in _STATUS_LABELS}
+    status_counts: dict[str, int] = {s: 0 for s in _STATUS_LABELS}
     rows = (
         db.query(Invoice.status, func.count(Invoice.id).label("cnt"))
         .filter(Invoice.created_at >= from_dt, Invoice.created_at <= to_dt)

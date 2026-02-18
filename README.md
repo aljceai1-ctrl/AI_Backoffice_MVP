@@ -83,13 +83,12 @@ Expected outcome after `make test`:
 **One-time setup** (after cloning):
 
 ```bash
-make venv                 # creates .venv + installs all runtime and dev deps
+pip install -r requirements.txt -r requirements-dev.txt
+# or just:
+make install-dev
+
 make pre-commit-install   # installs ruff lint/format as git pre-commit hooks
 ```
-
-`make venv` uses `python3 -m venv` — no system `pip` required. All quality
-targets (`lint`, `format`, `type`, `pytest`, `ci`) use `.venv/bin/` paths
-directly, so **you never need to activate the venv** to run Make targets.
 
 **Before every commit** — the pre-commit hooks run automatically, but you can
 also run them manually:
@@ -318,7 +317,7 @@ docker compose exec app pytest tests/ -v
 
 ```bash
 make up                     # ensures db_test is available on :5433
-make venv                   # one-time: creates .venv with all deps
+pip install -r requirements.txt -r requirements-dev.txt
 make pytest                 # pytest -q --tb=short
 ```
 

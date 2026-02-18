@@ -47,7 +47,7 @@ jobs:
             requirements-dev.txt
 
       - name: Install dev dependencies
-        run: python -m pip install -r requirements-dev.txt
+        run: pip install -r requirements-dev.txt
 
       - name: ruff — lint
         run: ruff check .
@@ -101,7 +101,7 @@ jobs:
             requirements-dev.txt
 
       - name: Install all dependencies
-        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+        run: pip install -r requirements.txt -r requirements-dev.txt
 
       - name: Create upload directory
         run: mkdir -p /tmp/backoffice_uploads

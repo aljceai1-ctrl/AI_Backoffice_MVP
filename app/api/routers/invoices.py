@@ -1,8 +1,8 @@
 """Invoice lifecycle endpoints."""
 
 import uuid
-from datetime import date, datetime, timezone
-from typing import Annotated, List, Optional
+from datetime import UTC, date, datetime
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
@@ -169,7 +169,7 @@ async def approve_invoice(
 
 @router.get(
     "",
-    response_model=List[InvoiceResponse],
+    response_model=list[InvoiceResponse],
     summary="List invoices with optional filters",
 )
 async def list_invoices(
@@ -178,16 +178,16 @@ async def list_invoices(
     filter_status: Optional[str] = Query(None, alias="status", description="Filter by status"),
     from_date: Optional[date] = Query(None, alias="from", description="Created on or after (YYYY-MM-DD)"),
     to_date: Optional[date] = Query(None, alias="to", description="Created on or before (YYYY-MM-DD)"),
-) -> List[Invoice]:
+) -> list[Invoice]:
     """Return invoices, newest first, filtered by status and/or creation date."""
     q = db.query(Invoice)
     if filter_status:
         q = q.filter(Invoice.status == filter_status.upper())
     if from_date:
-        from_dt = datetime(from_date.year, from_date.month, from_date.day, tzinfo=timezone.utc)
+        from_dt = datetime(from_date.year, from_date.month, from_date.day, tzinfo=UTC)
         q = q.filter(Invoice.created_at >= from_dt)
     if to_date:
-        to_dt = datetime(to_date.year, to_date.month, to_date.day, 23, 59, 59, tzinfo=timezone.utc)
+        to_dt = datetime(to_date.year, to_date.month, to_date.day, 23, 59, 59, tzinfo=UTC)
         q = q.filter(Invoice.created_at <= to_dt)
     return q.order_by(Invoice.created_at.desc()).all()
 

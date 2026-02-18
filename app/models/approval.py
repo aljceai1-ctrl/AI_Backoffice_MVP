@@ -1,7 +1,7 @@
 """Approval ORM model — records human approve/reject decisions."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, String, Text
@@ -25,7 +25,7 @@ class Approval(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     decided_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True

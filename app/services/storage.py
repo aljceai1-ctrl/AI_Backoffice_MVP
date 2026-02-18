@@ -7,7 +7,6 @@ import logging
 import shutil
 import uuid
 from pathlib import Path
-from typing import Tuple
 
 from fastapi import UploadFile
 
@@ -16,7 +15,7 @@ from app.core.settings import get_settings
 logger = logging.getLogger(__name__)
 
 
-def save_upload(file: UploadFile) -> Tuple[str, str]:
+def save_upload(file: UploadFile) -> tuple[str, str]:
     """Write an uploaded file to the configured uploads directory.
 
     The file is saved under a UUID-prefixed name to prevent collisions.

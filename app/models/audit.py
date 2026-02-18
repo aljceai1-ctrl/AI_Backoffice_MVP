@@ -1,7 +1,7 @@
 """Audit event ORM model — immutable log of every meaningful state change."""
 
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Optional
 
 from sqlalchemy import DateTime, Float, Index, String, Text
@@ -27,7 +27,7 @@ class AuditEvent(Base):
     timestamp: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
     )
     request_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     actor: Mapped[str] = mapped_column(

@@ -12,7 +12,7 @@ That's it — no other changes required.
 """
 
 import logging
-from typing import Callable, List
+from collections.abc import Callable
 
 from sqlalchemy.orm import Session
 
@@ -31,10 +31,10 @@ _BLOCKING_TYPES = frozenset(
 # ─── Individual rule checkers ────────────────────────────────────────────────
 
 
-def _check_required_fields(db: Session, invoice: Invoice) -> List[InvoiceException]:
+def _check_required_fields(db: Session, invoice: Invoice) -> list[InvoiceException]:
     """Flag any core field that is absent or blank."""
     required = ("vendor", "invoice_number", "invoice_date", "amount", "currency")
-    exceptions: List[InvoiceException] = []
+    exceptions: list[InvoiceException] = []
     for field in required:
         value = getattr(invoice, field, None)
         if value is None or (isinstance(value, str) and not value.strip()):
@@ -48,7 +48,7 @@ def _check_required_fields(db: Session, invoice: Invoice) -> List[InvoiceExcepti
     return exceptions
 
 
-def _check_amount(db: Session, invoice: Invoice) -> List[InvoiceException]:
+def _check_amount(db: Session, invoice: Invoice) -> list[InvoiceException]:
     """Amount must be strictly positive."""
     if invoice.amount is not None and float(invoice.amount) <= 0:
         return [
@@ -61,7 +61,7 @@ def _check_amount(db: Session, invoice: Invoice) -> List[InvoiceException]:
     return []
 
 
-def _check_currency(db: Session, invoice: Invoice) -> List[InvoiceException]:
+def _check_currency(db: Session, invoice: Invoice) -> list[InvoiceException]:
     """Currency must be in the configured allowed set."""
     settings = get_settings()
     if invoice.currency and invoice.currency.upper() not in [
@@ -80,7 +80,7 @@ def _check_currency(db: Session, invoice: Invoice) -> List[InvoiceException]:
     return []
 
 
-def _check_duplicate(db: Session, invoice: Invoice) -> List[InvoiceException]:
+def _check_duplicate(db: Session, invoice: Invoice) -> list[InvoiceException]:
     """Same invoice_number for the same vendor must not already exist."""
     if not (invoice.vendor and invoice.invoice_number):
         return []
@@ -108,7 +108,7 @@ def _check_duplicate(db: Session, invoice: Invoice) -> List[InvoiceException]:
 
 
 # Ordered list of rule functions to run
-_RULES: List[Callable[[Session, Invoice], List[InvoiceException]]] = [
+_RULES: list[Callable[[Session, Invoice], list[InvoiceException]]] = [
     _check_required_fields,
     _check_amount,
     _check_currency,
@@ -119,7 +119,7 @@ _RULES: List[Callable[[Session, Invoice], List[InvoiceException]]] = [
 # ─── Orchestrator ────────────────────────────────────────────────────────────
 
 
-def validate_invoice(db: Session, invoice: Invoice) -> List[InvoiceException]:
+def validate_invoice(db: Session, invoice: Invoice) -> list[InvoiceException]:
     """Run all validation rules against ``invoice``.
 
     Creates InvoiceException rows for every rule violation.
@@ -132,7 +132,7 @@ def validate_invoice(db: Session, invoice: Invoice) -> List[InvoiceException]:
     Returns:
         List of InvoiceException rows added (may be empty).
     """
-    all_exceptions: List[InvoiceException] = []
+    all_exceptions: list[InvoiceException] = []
 
     for rule in _RULES:
         exceptions = rule(db, invoice)
