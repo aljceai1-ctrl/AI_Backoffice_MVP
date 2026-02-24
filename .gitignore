@@ -5,11 +5,11 @@ __pycache__/
 *.pyd
 .venv/
 venv/
+*.egg-info/
 
 # Env / secrets
 .env
-*.env
-.env.*
+!.env.example
 
 # Local data
 data/uploads/
@@ -18,7 +18,26 @@ data/*.db
 
 # OS
 .DS_Store
+Thumbs.db
+
+# Node / Frontend
+node_modules/
+.next/
+out/
+frontend/.next/
+frontend/node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
 
 # Docker
 *.pid
-# smoke
+
+# Test artifacts
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/

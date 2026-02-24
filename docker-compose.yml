@@ -1,11 +1,7 @@
-# docker-compose.yml
-# No `version:` key — it is obsolete in Compose v2 and triggers a warning.
-# Docker Compose reads .env automatically for ${VAR} substitution below.
-
 services:
 
-  # ── Primary database ─────────────────────────────────────────────────────
-  db:
+  # ── Postgres ────────────────────────────────────────────────────────────
+  postgres:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: backoffice
@@ -15,7 +11,6 @@ services:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
-    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U backoffice -d backoffice"]
       interval: 5s
@@ -23,8 +18,8 @@ services:
       retries: 10
       start_period: 10s
 
-  # ── Test-only database (used by pytest) ──────────────────────────────────
-  db_test:
+  # ── Test-only database (used by pytest) ─────────────────────────────────
+  postgres_test:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: backoffice
@@ -39,31 +34,55 @@ services:
       retries: 10
       start_period: 10s
 
-  # ── Application ──────────────────────────────────────────────────────────
-  app:
-    build: .
-    depends_on:
-      db:
-        condition: service_healthy
-      db_test:
-        condition: service_healthy
-    environment:
-      # Docker-internal URLs (override anything from .env on host)
-      DATABASE_URL: postgresql://backoffice:backoffice@db:5432/backoffice
-      TEST_DATABASE_URL: postgresql://backoffice:backoffice@db_test:5432/backoffice_test
-      UPLOAD_DIR: /app/data/uploads
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      # Reads BACKOFFICE_API_KEY from .env (Compose auto-loads .env for substitution).
-      # Fallback to the dev default so the container still starts without .env.
-      BACKOFFICE_API_KEY: ${BACKOFFICE_API_KEY:-dev-api-key-change-me}
-      ALLOWED_CURRENCIES: '["AED","USD","EUR"]'
+  # ── MailHog (email capture for dev) ─────────────────────────────────────
+  mailhog:
+    image: mailhog/mailhog:latest
     ports:
-      - "8000:8000"
+      - "1025:1025"
+      - "8025:8025"
+
+  # ── Backend (FastAPI) ───────────────────────────────────────────────────
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      DATABASE_URL: postgresql://backoffice:backoffice@postgres:5432/backoffice
+      TEST_DATABASE_URL: postgresql://backoffice:backoffice@postgres_test:5432/backoffice_test
+      SECRET_KEY: dev-secret-key-change-in-production
+      MAILHOG_API_URL: http://mailhog:8025/api/v2
+      UPLOAD_DIR: /app/data/uploads
+      CORS_ORIGINS: '["http://localhost:3000"]'
+      SEED_DEMO_DATA: "true"
+      DEBUG: "true"
     volumes:
-      - ./data:/app/data   # persist uploads between container rebuilds
-      - .:/app             # live-reload: code changes apply without rebuild
+      - ./backend:/app
+      - uploads:/app/data/uploads
+    depends_on:
+      postgres:
+        condition: service_healthy
     restart: unless-stopped
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── Frontend (Next.js dev server) ───────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      API_BACKEND_URL: http://backend:8000
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/next.config.js:/app/next.config.js
+      - ./frontend/tailwind.config.ts:/app/tailwind.config.ts
+    depends_on:
+      - backend
+    restart: unless-stopped
 
 volumes:
   pgdata:
+  uploads:

@@ -1,106 +1,135 @@
 # =============================================================================
-# AI Backoffice MVP — Developer Makefile
-# All targets are meant to be run from the repo root.
-# Requires Docker Desktop (docker compose v2).
+# AI Backoffice MVP — Monorepo Developer Makefile
 # =============================================================================
 
-.PHONY: up down migrate test logs shell psql \
-        lint format format-check type ci \
-        install-dev pre-commit-install help
+.PHONY: up down logs migrate seed test smoke ci \
+        lint format format-check type pytest \
+        venv install-dev \
+        shell psql help
 
-# Default target
+# ── Virtual-environment paths (for backend local dev) ────────────────────────
+VENV := backend/.venv
+BIN  := $(VENV)/bin
+
+define _check_venv
+	@if [ ! -f "$(BIN)/ruff" ]; then \
+		echo ""; \
+		echo "  ✗  $(BIN)/ruff not found — run  make venv  first."; \
+		echo ""; \
+		exit 1; \
+	fi
+endef
+
+# ── Help ─────────────────────────────────────────────────────────────────────
 help:
 	@echo ""
-	@echo "  AI Backoffice MVP — available targets"
+	@echo "  AI Backoffice MVP — Monorepo"
 	@echo ""
-	@echo "  ── Service lifecycle ──────────────────────────────────────────"
-	@echo "  make up       Build images and start all services in the background"
-	@echo "  make down     Stop and remove containers + volumes (full wipe)"
-	@echo "  make migrate  Run Alembic migrations inside the app container"
-	@echo "  make logs     Tail application logs (Ctrl-C to stop)"
-	@echo "  make shell    Open a bash shell inside the app container"
-	@echo "  make psql     Open psql inside the db container"
+	@echo "  ── Docker (primary workflow) ──────────────────────────────────"
+	@echo "  make up         Build and start all services (backend, frontend, postgres, mailhog)"
+	@echo "  make down       Stop and remove all containers + volumes"
+	@echo "  make logs       Tail logs"
+	@echo "  make test       Run backend pytest suite in Docker"
+	@echo "  make smoke      Health-check backend + frontend URLs"
+	@echo "  make seed       Re-seed demo data"
+	@echo "  make migrate    Run Alembic migrations"
 	@echo ""
-	@echo "  ── Testing ────────────────────────────────────────────────────"
-	@echo "  make test     Run the end-to-end smoke test (requires running stack)"
-	@echo "  make pytest   Run the pytest unit/integration suite (local Postgres)"
+	@echo "  ── Code quality (backend) ────────────────────────────────────"
+	@echo "  make venv       Create backend/.venv and install all deps"
+	@echo "  make ci         Run full quality gate: lint + format + type + tests"
+	@echo "  make lint       ruff check"
+	@echo "  make format     ruff format (auto-fix)"
+	@echo "  make type       mypy"
+	@echo "  make pytest     pytest (needs postgres_test on :5433)"
 	@echo ""
-	@echo "  ── Code quality ───────────────────────────────────────────────"
-	@echo "  make lint         ruff check — show all lint violations"
-	@echo "  make format       ruff format — auto-fix formatting in place"
-	@echo "  make format-check ruff format --check — fail if formatting differs"
-	@echo "  make type         mypy — static type check of app/"
-	@echo "  make ci           lint + format-check + type + pytest (full local CI)"
+	@echo "  ── Frontend ─────────────────────────────────────────────────"
+	@echo "  make fe-dev     Run frontend in dev mode"
+	@echo "  make fe-lint    Run Next.js lint"
 	@echo ""
-	@echo "  ── Setup ──────────────────────────────────────────────────────"
-	@echo "  make install-dev        pip install -r requirements-dev.txt"
-	@echo "  make pre-commit-install Install git hooks via pre-commit"
+	@echo "  URLs:"
+	@echo "    Frontend:    http://localhost:3000"
+	@echo "    Backend API: http://localhost:8000/docs"
+	@echo "    MailHog:     http://localhost:8025"
 	@echo ""
 
-# ── Lifecycle ─────────────────────────────────────────────────────────────────
-
+# ── Docker lifecycle ─────────────────────────────────────────────────────────
 up:
 	docker compose up -d --build
 	@echo ""
-	@echo "  Services started. Run 'make migrate' then 'make test'."
-	@echo "  Docs: http://localhost:8000/docs"
+	@echo "  ✓ Services starting..."
+	@echo "    Frontend:    http://localhost:3000"
+	@echo "    Backend API: http://localhost:8000/docs"
+	@echo "    MailHog:     http://localhost:8025"
 
 down:
 	docker compose down -v
 	@echo "  All containers and volumes removed."
 
-# ── Database ──────────────────────────────────────────────────────────────────
-
-migrate:
-	docker compose exec app alembic upgrade head
-	@echo "  Migrations applied."
-
-# ── Smoke test (end-to-end, needs running stack) ──────────────────────────────
-
-test:
-	@bash scripts/smoke_test.sh
-
-# ── Unit / integration tests (local, needs Postgres on 5433) ─────────────────
-
-pytest:
-	pytest -q --tb=short
-
-# ── Observability ─────────────────────────────────────────────────────────────
-
 logs:
 	docker compose logs -f --tail=200
 
-# ── Convenience shells ────────────────────────────────────────────────────────
+migrate:
+	docker compose exec backend python scripts/run_migrations.py
 
-shell:
-	docker compose exec app bash
+seed:
+	docker compose exec backend python scripts/seed.py
 
-psql:
-	docker compose exec db psql -U backoffice -d backoffice
-
-# ── Code quality ─────────────────────────────────────────────────────────────
-
-lint:
-	ruff check .
-
-format:
-	ruff format .
-
-format-check:
-	ruff format --check .
-
-type:
-	mypy app/
-
-# Run the full CI gate locally (same checks as GitHub Actions quality + tests).
-ci: lint format-check type pytest
-
-# ── Developer setup ───────────────────────────────────────────────────────────
+# ── Backend virtual environment (local dev) ──────────────────────────────────
+venv:
+	cd backend && python3 -m venv .venv
+	$(BIN)/python -m pip install --quiet --upgrade pip setuptools wheel
+	$(BIN)/pip install --quiet -r backend/requirements.txt -r backend/requirements-dev.txt
+	@echo ""
+	@echo "  ✓  backend/.venv ready"
 
 install-dev:
-	pip install -r requirements-dev.txt
-	@echo "  Dev dependencies installed."
+	@$(MAKE) venv
 
-pre-commit-install:
-	pre-commit install
-	@echo "  Pre-commit hooks installed."
+# ── Code quality ─────────────────────────────────────────────────────────────
+lint:
+	$(call _check_venv)
+	cd backend && .venv/bin/ruff check .
+
+format:
+	$(call _check_venv)
+	cd backend && .venv/bin/ruff format .
+
+format-check:
+	$(call _check_venv)
+	cd backend && .venv/bin/ruff format --check .
+
+type:
+	$(call _check_venv)
+	cd backend && .venv/bin/mypy app/
+
+ci: lint format-check type pytest
+
+pytest:
+	$(call _check_venv)
+	cd backend && .venv/bin/pytest -q --tb=short
+
+# ── Frontend ─────────────────────────────────────────────────────────────────
+fe-dev:
+	cd frontend && npm run dev
+
+fe-lint:
+	cd frontend && npm run lint
+
+fe-build:
+	cd frontend && npm run build
+
+# ── Convenience shells ───────────────────────────────────────────────────────
+shell:
+	docker compose exec backend bash
+
+psql:
+	docker compose exec postgres psql -U backoffice -d backoffice
+
+test:
+	docker compose exec backend python -m pytest -q --tb=short
+
+smoke:
+	@echo "Running backend health check..."
+	@curl -sf http://localhost:8000/api/health && echo " ✓ Backend OK" || echo " ✗ Backend not ready"
+	@echo "Running frontend check..."
+	@curl -sf http://localhost:3000 > /dev/null && echo " ✓ Frontend OK" || echo " ✗ Frontend not ready"

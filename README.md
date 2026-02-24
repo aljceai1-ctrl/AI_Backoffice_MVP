@@ -1,326 +1,210 @@
 # AI Backoffice MVP
 
-> Local invoice-processing system for Dubai SMEs / property management.
-> Upload → Extract → Validate → Human Approval → CSV Export. **No autopay.**
+> Multi-tenant invoice management system with email ingestion, RBAC, dashboards, and analytics.
 
 ---
 
 ## Quickstart
 
-**Prerequisites**
-
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) running (includes `docker compose` v2)
-- macOS or Linux shell (bash or zsh — see zsh tips below)
-- `make` (pre-installed on macOS via Xcode CLT; `sudo apt install make` on Ubuntu)
-
-**Four commands to a running system**
+**Prerequisites:** Docker Desktop running, `make`, and a shell (bash/zsh).
 
 ```bash
 cd ~/Desktop/AI_Backoffice_MVP
-make up        # build images + start postgres + app  (~60 s first run)
-make migrate   # apply Alembic migrations to postgres
-make test      # run end-to-end smoke test (all 8 checks must pass)
-open http://localhost:8000/docs   # interactive API explorer
+make up      # builds + starts: postgres, mailhog, backend, frontend
 ```
 
-Expected outcome after `make test`:
+Wait ~90 seconds for first build. Then:
 
-```
-── Step 1/8  Health check
-  ✓  GET /health → {"status":"ok"}
-── Step 2/8  Upload invoice
-  ✓  POST /invoices/upload → id=<uuid>  status=NEW
-── Step 3/8  Extract fields
-  ✓  POST /invoices/<uuid>/extract → status=EXTRACTED
-── Step 4/8  Validate
-  ✓  POST /invoices/<uuid>/validate → status=VALIDATED
-── Step 5/8  Approve
-  ✓  POST /invoices/<uuid>/approve → decision=APPROVE
-  ✓  GET /invoices/<uuid> → status=APPROVED
-── Step 6/8  Payment pack CSV
-  ✓  GET /payment-pack.csv → contains approved invoice
-── Step 7/8  Weekly pack Markdown
-  ✓  GET /weekly-pack.md → Markdown report returned
-── Step 8/8  Audit log
-  ✓  GET /audit?limit=20 → N event(s) returned
+- **Frontend:** http://localhost:3000
+- **Backend API docs:** http://localhost:8000/docs
+- **MailHog (email):** http://localhost:8025
 
-  PASSED  8 / 8 checks
-```
+The backend auto-runs migrations and seeds demo data on first start.
 
 ---
 
-## Make targets
+## Demo Logins
 
-**Service lifecycle**
+All passwords: **`demo1234`**
 
-| Command | What it does |
-|---------|-------------|
-| `make up` | `docker compose up -d --build` |
-| `make migrate` | `docker compose exec app alembic upgrade head` |
-| `make test` | Runs `scripts/smoke_test.sh` against `http://localhost:8000` |
-| `make logs` | `docker compose logs -f --tail=200` |
-| `make down` | `docker compose down -v` (removes containers **and** volumes) |
-| `make shell` | bash shell inside the app container |
-| `make psql` | psql inside the db container |
-
-**Code quality**
-
-| Command | What it does |
-|---------|-------------|
-| `make lint` | `ruff check .` — show all violations |
-| `make format` | `ruff format .` — auto-fix formatting in place |
-| `make format-check` | `ruff format --check .` — fail if formatting differs (used in CI) |
-| `make type` | `mypy app/` — static type analysis |
-| `make pytest` | `pytest -q --tb=short` — unit/integration suite (needs db_test on :5433) |
-| `make ci` | Full local CI gate: lint + format-check + type + pytest |
-| `make install-dev` | `pip install -r requirements-dev.txt` |
-| `make pre-commit-install` | Install git hooks via pre-commit |
+| Email | Role | Tenant |
+|-------|------|--------|
+| `admin@acme.local` | ADMIN | Acme Corp |
+| `approver@acme.local` | APPROVER | Acme Corp |
+| `auditor@acme.local` | AUDITOR | Acme Corp |
+| `uploader@acme.local` | UPLOADER | Acme Corp |
+| `viewer@acme.local` | VIEWER | Acme Corp |
+| `admin@gulf.local` | ADMIN | Gulf Trading LLC |
+| `approver@gulf.local` | APPROVER | Gulf Trading LLC |
 
 ---
 
-## Developer workflow
-
-**One-time setup** (after cloning):
-
-```bash
-pip install -r requirements.txt -r requirements-dev.txt
-# or just:
-make install-dev
-
-make pre-commit-install   # installs ruff lint/format as git pre-commit hooks
-```
-
-**Before every commit** — the pre-commit hooks run automatically, but you can
-also run them manually:
-
-```bash
-make format    # auto-fix any formatting issues
-make lint      # check for remaining violations (should be zero after format)
-```
-
-**Full local CI gate** — mirrors what GitHub Actions runs:
-
-```bash
-make ci        # lint + format-check + type + pytest
-```
-
-**Individual checks:**
-
-```bash
-make lint          # ruff lint only
-make type          # mypy only
-make pytest        # pytest only
-```
-
-**GitHub Actions** runs automatically on every push and pull request targeting
-`main`. The workflow is at `.github/workflows/ci.yml` and has three jobs:
-
-- **quality** — ruff lint, ruff format check, mypy (runs first, fast feedback)
-- **tests** — pytest against a real Postgres service container (runs after quality)
-- **docker** — `docker build` smoke-test to catch Dockerfile breakage (runs after quality)
-
----
-
-## API reference
-
-All endpoints except `GET /health` require the header `X-API-Key: <value>`.
-The key is set in `.env` as `BACKOFFICE_API_KEY`.
-
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/health` | Liveness probe (no auth) |
-| POST | `/invoices/upload` | Upload invoice file (multipart) |
-| POST | `/invoices/{id}/extract` | Apply structured fields |
-| POST | `/invoices/{id}/validate` | Run validation rules |
-| POST | `/invoices/{id}/approve` | Human APPROVE / REJECT |
-| GET | `/invoices` | List with optional `status` / date filters |
-| GET | `/invoices/{id}` | Detail + exceptions + approvals |
-| GET | `/payment-pack.csv` | Export approved invoices (date range) |
-| GET | `/weekly-pack.md` | Weekly finance ops report |
-| GET | `/audit` | Immutable audit trail |
-
-**Demo curl sequence** (replace `$ID` with the returned UUID):
-
-```bash
-KEY="dev-api-key-change-me"
-BASE="http://localhost:8000"
-
-# Upload
-ID=$(curl -s -X POST "$BASE/invoices/upload" \
-  -H "X-API-Key: $KEY" \
-  -F "file=@test_data/sample_invoice.txt" \
-  | python3 -c "import sys,json;print(json.load(sys.stdin)['id'])")
-
-# Extract
-curl -s -X POST "$BASE/invoices/$ID/extract" \
-  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
-  -d '{"vendor":"ACME","invoice_number":"INV-001","invoice_date":"2024-06-01","due_date":"2024-06-30","amount":10000,"currency":"AED"}'
-
-# Validate
-curl -s -X POST "$BASE/invoices/$ID/validate" -H "X-API-Key: $KEY"
-
-# Approve
-curl -s -X POST "$BASE/invoices/$ID/approve" \
-  -H "X-API-Key: $KEY" -H "Content-Type: application/json" \
-  -d '{"decision":"APPROVE","decided_by":"Finance Manager","notes":"OK"}'
-
-# Export CSV
-curl -s "$BASE/payment-pack.csv?from=2024-01-01&to=2024-12-31" -H "X-API-Key: $KEY"
-
-# Audit trail
-curl -s "$BASE/audit?limit=20" -H "X-API-Key: $KEY" | python3 -m json.tool
-```
-
----
-
-## Environment variables
-
-Copy `.env.example` → `.env` to override defaults:
-
-```bash
-cp .env.example .env
-```
-
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `BACKOFFICE_API_KEY` | `dev-api-key-change-me` | **Change before any non-local use** |
-| `DATABASE_URL` | `postgresql://…@localhost:5432/…` | Overridden inside Docker to `@db:5432` |
-| `UPLOAD_DIR` | `./data/uploads` | Overridden inside Docker to `/app/data/uploads` |
-| `ALLOWED_CURRENCIES` | `["AED","USD","EUR"]` | JSON array string |
-| `LOG_LEVEL` | `INFO` | `DEBUG`, `INFO`, `WARNING`, `ERROR` |
-
----
-
-## Troubleshooting
-
-### "Cannot connect to the Docker daemon" / Docker not running
-
-```bash
-open -a Docker          # macOS: start Docker Desktop
-# wait ~15 s, then:
-make up
-```
-
-### Ports 8000 or 5432 already in use
-
-```bash
-# Find what's on the port:
-lsof -i :8000
-lsof -i :5432
-
-# Kill it, or change the host port in docker-compose.yml:
-#   ports:
-#     - "8001:8000"   ← change left side only
-```
-
-### `relation "invoices" does not exist` (or any 503 from the API)
-
-Migrations have not been applied. Run:
-
-```bash
-make migrate
-```
-
-The app now returns a friendly 503 with the hint message if this happens at
-runtime, and logs a prominent warning box at startup.
-
-### `make test` fails with "connection error" on step 1
-
-The app container may still be starting. Check its status:
-
-```bash
-make logs          # look for "Application startup complete"
-docker compose ps  # app should show "running"
-```
-
-If it shows "restarting", there is likely a Python error — `make logs` will
-show the traceback.
-
-### zsh-specific pitfalls
-
-- **Never prepend `~` to `docker`** — `~docker` means "home directory of user
-  docker" in zsh and will fail with a confusing error.
-- **Bracketed paste mode** can inject `^[[200~` / `^[[201~` characters at the
-  start/end of a pasted block. If a command fails with `zsh: command not found:
-  ^[[200~docker`, paste it into a plain text editor first, then run it.
-- **Long multi-line curl commands** pasted directly into zsh can lose newlines
-  or misparse quoting. For complex sequences, run them as a bash script:
-  ```bash
-  bash -c 'curl -s http://localhost:8000/health'
-  ```
-- **History expansion**: if your API key or JSON contains `!`, wrap the
-  argument in single quotes or use `set +H` first.
-
-### Completely reset local state
-
-```bash
-make down          # removes containers + postgres volume
-make up            # rebuild from scratch
-make migrate       # re-apply migrations
-make test          # verify everything works
-```
-
----
-
-## Project layout
+## Architecture
 
 ```
 AI_Backoffice_MVP/
-├── .github/
-│   └── workflows/
-│       └── ci.yml           GitHub Actions: quality + tests + docker-build
-├── app/
-│   ├── main.py              FastAPI app, lifespan, error handlers
-│   ├── core/                settings, auth, logging, middleware
-│   ├── db/                  engine, session, base
-│   ├── models/              SQLAlchemy ORM (invoice, exception, approval, audit)
-│   ├── schemas/             Pydantic v2 request/response models
-│   ├── api/routers/         health, invoices, exports, audit
-│   └── services/            storage, extraction*, validation, approval,
-│                            exports, reporting, audit
-├── alembic/                 migrations (001_initial_schema.py)
-├── tests/                   pytest suite (requires db_test on :5433)
-├── test_data/               sample_invoice.txt — used by smoke_test.sh
-├── scripts/
-│   ├── smoke_test.sh        end-to-end demo test (make test)
-│   ├── bootstrap.sh         all-in-one first-run helper
-│   └── reset_db.sh          drop + recreate schema (dev only)
-├── data/uploads/            invoice file storage (gitignored)
-├── .pre-commit-config.yaml  ruff lint + format hooks
-├── Makefile
-├── docker-compose.yml
-├── Dockerfile
-├── pyproject.toml           ruff, mypy, pytest config
-├── requirements.txt         runtime dependencies
-├── requirements-dev.txt     ruff, mypy, pre-commit (CI / dev only)
+├── backend/             Python 3.12 + FastAPI + SQLAlchemy 2.0
+│   ├── app/
+│   │   ├── api/routers/ auth, users, invoices, payments, audit, analytics, exports, tenants
+│   │   ├── core/        config, security (JWT + bcrypt)
+│   │   ├── db/          engine, session, base
+│   │   ├── models/      8 tables: tenants, users, invoices, payments, exceptions, approvals, audit_events, ingestion_runs
+│   │   ├── schemas/     Pydantic v2 request/response models
+│   │   ├── services/    validation, audit
+│   │   └── workers/     email poller (APScheduler + MailHog)
+│   ├── alembic/         migrations
+│   ├── scripts/         entrypoint, seed, migrations runner
+│   ├── tests/           pytest: auth, RBAC, tenant isolation, invoices, analytics
+│   └── Dockerfile
+├── frontend/            Next.js 14 + TypeScript + Tailwind + Recharts
+│   ├── src/app/         login, dashboard, invoices, invoices/[id], audit, admin/users, admin/settings
+│   ├── src/components/  layout (sidebar, auth guard), charts
+│   ├── src/lib/         api client, auth context, utils
+│   └── Dockerfile
+├── docker-compose.yml   postgres, postgres_test, mailhog, backend, frontend
+├── Makefile             up, down, seed, migrate, ci, lint, test
+├── .github/workflows/   CI: backend quality + tests, frontend lint + build, docker
 └── .env.example
 ```
 
-\* `app/services/extraction.py` contains the marked integration point for
-LLM/OCR extraction. See that file for instructions.
+---
+
+## Make Targets
+
+| Command | Description |
+|---------|-------------|
+| `make up` | Build and start all services |
+| `make down` | Stop and remove containers + volumes |
+| `make logs` | Tail container logs |
+| `make seed` | Re-run seed script |
+| `make migrate` | Run Alembic migrations |
+| `make ci` | Full quality gate: lint + format-check + type + pytest |
+| `make venv` | Create backend/.venv with all deps |
+| `make lint` | ruff check |
+| `make format` | ruff format (auto-fix) |
+| `make type` | mypy |
+| `make pytest` | Run backend tests |
+| `make fe-lint` | Run frontend lint |
+| `make fe-build` | Build frontend |
+| `make test` | Health check (backend + frontend) |
+| `make shell` | Bash into backend container |
+| `make psql` | psql into postgres |
 
 ---
 
-## Running pytest
+## Core Features
 
-The pytest suite uses a separate Postgres instance on port 5433 (`db_test`).
-Both containers must be running (started by `make up`).
+**Authentication & RBAC**
+- JWT-based auth with httpOnly cookies + Bearer tokens
+- 5 roles: ADMIN, AUDITOR, APPROVER, UPLOADER, VIEWER
+- Full tenant isolation (every query scoped by tenant_id)
 
-**Simplest — run inside the container (no local Python needed):**
+**Invoice Management**
+- Upload PDF/image + metadata
+- Automatic validation (required fields, duplicate detection, amount checks, currency validation)
+- Status workflow: NEW -> VALIDATED -> APPROVAL_PENDING -> APPROVED -> PAID (or REJECTED)
+- Download original files
 
-```bash
-make up    # starts both db and db_test
-docker compose exec app pytest tests/ -v
-```
+**Email Ingestion**
+- Each tenant gets an inbound email alias (e.g., `acme@inbound.local`)
+- APScheduler polls MailHog every 15 seconds
+- Automatically creates invoices from email attachments
+- Tracks ingestion runs with metrics (processed, failures, retries)
 
-**Local — run on your machine (needs `db_test` container):**
+**Dashboards & Analytics**
+- Invoice status distribution (pie chart)
+- Payments over time, top vendors (bar/line charts)
+- Exception rate tracking, top exception codes
+- Clean invoice rate, mean time to approval, mean time to resolve
+- Ingestion reliability: emails per day, failure rate, retry distribution
+- Audit effectiveness: approvals per approver, rejection rate
 
-```bash
-make up                     # ensures db_test is available on :5433
-pip install -r requirements.txt -r requirements-dev.txt
-make pytest                 # pytest -q --tb=short
-```
+**Exports**
+- Payment pack CSV (date range filter)
+- Weekly markdown report
 
 ---
 
-*Built with Python 3.12 · FastAPI 0.111 · SQLAlchemy 2.0 · Alembic · Pydantic v2 · PostgreSQL 16*
+## How to Test Email Ingestion Locally
+
+1. Open MailHog: http://localhost:8025
+2. Use the MailHog SMTP server (localhost:1025) to send an email:
+
+```bash
+# Using swaks (brew install swaks):
+swaks --to acme@inbound.local --from test@example.com \
+  --server localhost:1025 \
+  --attach test_data/sample_invoice.txt \
+  --header "Subject: Invoice from vendor"
+
+# Or use any email client configured with SMTP: localhost:1025
+```
+
+3. The backend polls MailHog every 15 seconds. Check the invoices list at http://localhost:3000/invoices for the new entry.
+
+---
+
+## API Endpoints
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/api/auth/login` | No | Login, returns JWT |
+| POST | `/api/auth/logout` | Yes | Clear session |
+| GET | `/api/auth/me` | Yes | Current user info |
+| GET | `/api/users` | ADMIN | List tenant users |
+| POST | `/api/users` | ADMIN | Create user |
+| PATCH | `/api/users/{id}` | ADMIN | Update user |
+| POST | `/api/invoices/upload` | ADMIN/APPROVER/UPLOADER | Upload invoice |
+| GET | `/api/invoices` | Any | List invoices (filters: status, vendor, dates) |
+| GET | `/api/invoices/{id}` | Any | Invoice detail |
+| GET | `/api/invoices/{id}/download` | Any | Download file |
+| POST | `/api/invoices/{id}/approve` | ADMIN/APPROVER | Approve invoice |
+| POST | `/api/invoices/{id}/reject` | ADMIN/APPROVER | Reject invoice |
+| POST | `/api/invoices/{id}/mark-paid` | ADMIN/APPROVER | Mark as paid |
+| GET | `/api/payments` | Any | List payments |
+| POST | `/api/payments` | ADMIN/APPROVER | Create payment |
+| GET | `/api/audit` | ADMIN/AUDITOR/APPROVER | Audit log |
+| GET | `/api/analytics/overview` | Any | Dashboard overview |
+| GET | `/api/analytics/payments` | Any | Payment analytics |
+| GET | `/api/analytics/effectiveness` | Any | System effectiveness |
+| GET | `/api/analytics/ingestion` | Any | Ingestion reliability |
+| GET | `/api/analytics/audit-effectiveness` | Any | Audit analytics |
+| GET | `/api/exports/payment-pack.csv` | Any | Export payments CSV |
+| GET | `/api/exports/weekly-pack.md` | Any | Weekly markdown report |
+| GET | `/api/tenants/settings` | ADMIN | Tenant settings |
+| PATCH | `/api/tenants/settings` | ADMIN | Update settings |
+
+---
+
+## Environment Variables
+
+See `.env.example` for all variables. Key ones:
+
+| Variable | Default | Notes |
+|----------|---------|-------|
+| `SECRET_KEY` | dev default | **Change in production** |
+| `DATABASE_URL` | postgres://...@localhost:5432/... | Overridden in Docker |
+| `MAILHOG_API_URL` | http://localhost:8025/api/v2 | MailHog API |
+| `EMAIL_POLL_INTERVAL_SECONDS` | 15 | Email polling frequency |
+| `CORS_ORIGINS` | ["http://localhost:3000"] | Allowed CORS origins |
+
+---
+
+## Production Notes
+
+**Email Ingestion Adapters:** The email poller is built with a provider pattern. For production:
+- SendGrid Inbound Parse: Implement a webhook handler that receives parsed emails
+- AWS SES: Set up an SES receipt rule to invoke a Lambda or push to SQS
+- The `MailHogProvider` class in `backend/app/workers/email_poller.py` shows the interface
+
+**Security Checklist:**
+- [ ] Change `SECRET_KEY` to a strong random value
+- [ ] Use HTTPS in production (set secure cookie flag)
+- [ ] Configure proper CORS origins
+- [ ] Use a managed Postgres instance
+- [ ] Set up S3 for file storage (replace local UPLOAD_DIR)
+- [ ] Enable rate limiting in reverse proxy
+
+---
+
+*Built with Python 3.12, FastAPI, SQLAlchemy 2.0, Next.js 14, TypeScript, Tailwind CSS, Recharts, PostgreSQL 16*

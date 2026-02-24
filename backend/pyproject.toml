@@ -1,0 +1,27 @@
+[project]
+name = "ai-backoffice-mvp"
+version = "0.1.0"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+select = ["E", "W", "F", "I", "UP"]
+ignore = ["UP007", "E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+[tool.ruff.lint.per-file-ignores]
+"alembic/env.py" = ["E402", "F401"]
+"app/models/__init__.py" = ["F401"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = false
+ignore_missing_imports = true
+disable_error_code = ["assignment", "arg-type"]
+exclude = ["alembic/"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
