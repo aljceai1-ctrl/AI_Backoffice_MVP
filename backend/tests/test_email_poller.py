@@ -189,11 +189,14 @@ class TestPollAndIngest:
         mock_tenant.id = "tenant-uuid-1"
         db.query.return_value.filter.return_value.first.return_value = mock_tenant
 
-        # Mock invoice flush (sets id)
-        def set_invoice_id(inv):
-            if hasattr(inv, "source"):
-                inv.id = "inv-uuid-1"
-        db.flush.side_effect = set_invoice_id
+        # Mock invoice flush — db.flush() is called with no args,
+        # so we find the last-added Invoice via db.add call history.
+        def on_flush():
+            for call in db.add.call_args_list:
+                obj = call[0][0]
+                if hasattr(obj, "source_message_id") and getattr(obj, "id", None) is None:
+                    obj.id = "inv-uuid-1"
+        db.flush.side_effect = on_flush
 
         poll_and_ingest()
 
