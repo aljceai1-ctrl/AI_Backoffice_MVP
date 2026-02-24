@@ -54,6 +54,9 @@ export interface Invoice {
   status: string;
   source: string;
   original_filename: string;
+  email_subject: string | null;
+  email_from: string | null;
+  attachment_count: number;
   created_at: string;
   updated_at: string;
   exceptions: InvoiceException[];

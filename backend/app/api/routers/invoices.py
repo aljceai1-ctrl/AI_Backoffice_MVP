@@ -38,6 +38,9 @@ def _inv_to_response(inv: Invoice) -> InvoiceResponse:
         status=inv.status,
         source=inv.source,
         original_filename=inv.original_filename or "",
+        email_subject=inv.email_subject,
+        email_from=inv.email_from,
+        attachment_count=inv.attachment_count or 0,
         created_at=inv.created_at.isoformat() if inv.created_at else "",
         updated_at=inv.updated_at.isoformat() if inv.updated_at else "",
         exceptions=[
@@ -160,6 +163,37 @@ def list_invoices(
             q = q.filter(Invoice.created_at <= datetime.fromisoformat(to_date + "T23:59:59"))
         except ValueError:
             pass
+
+    total = q.count()
+    items = q.order_by(Invoice.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    return InvoiceListResponse(
+        items=[_inv_to_response(i) for i in items],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/review-queue", response_model=InvoiceListResponse)
+def review_queue(
+    source: str | None = None,
+    page: int = 1,
+    page_size: int = 25,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return invoices needing review: status in (NEW, VALIDATED, APPROVAL_PENDING)."""
+    review_statuses = [
+        InvoiceStatus.NEW.value,
+        InvoiceStatus.VALIDATED.value,
+        InvoiceStatus.APPROVAL_PENDING.value,
+    ]
+    q = db.query(Invoice).filter(
+        Invoice.tenant_id == current_user.tenant_id,
+        Invoice.status.in_(review_statuses),
+    )
+    if source:
+        q = q.filter(Invoice.source == source.upper())
 
     total = q.count()
     items = q.order_by(Invoice.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()

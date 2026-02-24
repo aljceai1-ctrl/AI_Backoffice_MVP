@@ -55,6 +55,9 @@ class InvoiceResponse(BaseModel):
     status: str
     source: str
     original_filename: str
+    email_subject: str | None = None
+    email_from: str | None = None
+    attachment_count: int = 0
     created_at: str
     updated_at: str
     exceptions: list[ExceptionResponse] = []

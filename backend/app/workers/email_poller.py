@@ -83,15 +83,51 @@ def _find_tenant_by_inbound(db: Session, address: str) -> Tenant | None:
     return db.query(Tenant).filter(Tenant.inbound_email_alias == alias).first()
 
 
-def _save_attachment(content_bytes: bytes, filename: str) -> str:
-    """Save attachment to upload directory, return file path."""
-    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+def _save_attachment(content_bytes: bytes, filename: str, tenant_id: str = "", message_id: str = "") -> str:
+    """Save attachment to tenant-scoped upload directory, return file path.
+
+    Layout: <UPLOAD_DIR>/<tenant_id>/<message_id>/<uuid>_<filename>
+    Falls back to flat UPLOAD_DIR when tenant_id or message_id are empty.
+    """
+    if tenant_id and message_id:
+        safe_msg_id = message_id.replace("/", "_").replace("\\", "_")[:80]
+        target_dir = os.path.join(settings.UPLOAD_DIR, str(tenant_id), safe_msg_id)
+    else:
+        target_dir = settings.UPLOAD_DIR
+
+    os.makedirs(target_dir, exist_ok=True)
     file_id = str(uuid.uuid4())
-    ext = os.path.splitext(filename)[1] if filename else ".bin"
-    path = os.path.join(settings.UPLOAD_DIR, f"{file_id}{ext}")
+    safe_filename = os.path.basename(filename or "attachment")
+    path = os.path.join(target_dir, f"{file_id}_{safe_filename}")
     with open(path, "wb") as f:
         f.write(content_bytes)
     return path
+
+
+def _extract_email_metadata(msg: dict) -> dict:
+    """Extract subject and from address from a MailHog message."""
+    # From address
+    from_info = msg.get("From")
+    from_addr = ""
+    if isinstance(from_info, dict):
+        mailbox = (from_info.get("Mailbox") or "").strip()
+        domain = (from_info.get("Domain") or "").strip()
+        from_addr = f"{mailbox}@{domain}" if domain else mailbox
+
+    if not from_addr:
+        content = msg.get("Content") or {}
+        headers = content.get("Headers") or {}
+        from_list = headers.get("From", [])
+        if from_list:
+            from_addr = from_list[0].strip()
+
+    # Subject
+    content = msg.get("Content") or {}
+    headers = content.get("Headers") or {}
+    subject_list = headers.get("Subject", [])
+    subject = subject_list[0].strip() if subject_list else ""
+
+    return {"email_from": from_addr, "email_subject": subject}
 
 
 def _extract_attachments_from_mime(msg: dict) -> list[tuple[str, bytes]]:
@@ -201,6 +237,9 @@ def poll_and_ingest():
 
                 run.tenant_id = tenant.id
 
+                # Extract email metadata (subject, from)
+                email_meta = _extract_email_metadata(msg)
+
                 # Extract attachments: MIME parts → Raw.Data RFC822 → empty
                 attachments = _extract_attachments(msg)
                 if not attachments:
@@ -210,7 +249,10 @@ def poll_and_ingest():
                     continue
 
                 for filename, file_bytes in attachments:
-                    file_path = _save_attachment(file_bytes, filename)
+                    file_path = _save_attachment(
+                        file_bytes, filename,
+                        tenant_id=str(tenant.id), message_id=msg_id,
+                    )
 
                     inv = Invoice(
                         tenant_id=tenant.id,
@@ -219,6 +261,9 @@ def poll_and_ingest():
                         original_filename=filename,
                         source=InvoiceSource.EMAIL.value,
                         source_message_id=msg_id,
+                        email_subject=email_meta["email_subject"],
+                        email_from=email_meta["email_from"],
+                        attachment_count=len(attachments),
                         status=InvoiceStatus.NEW.value,
                     )
                     db.add(inv)
@@ -239,7 +284,12 @@ def poll_and_ingest():
                         action="EMAIL_RECEIVED",
                         entity_type="invoice",
                         entity_id=str(inv.id),
-                        metadata_json={"filename": filename, "from_email": to_addr, "message_id": msg_id},
+                        metadata_json={
+                            "filename": filename,
+                            "from_email": email_meta["email_from"],
+                            "subject": email_meta["email_subject"],
+                            "message_id": msg_id,
+                        },
                     ))
                     invoices_created += 1
 

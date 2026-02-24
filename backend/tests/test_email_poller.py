@@ -6,6 +6,7 @@ import pytest
 
 from app.workers.email_poller import (
     _extract_attachments,
+    _extract_email_metadata,
     _extract_to_address,
     _find_tenant_by_inbound,
     poll_and_ingest,
@@ -164,6 +165,36 @@ class TestExtractAttachments:
         assert attachments == []
 
 
+# ── _extract_email_metadata tests ─────────────────────────────────────────────
+
+class TestExtractEmailMetadata:
+    def test_real_mailhog_has_from_and_subject(self):
+        meta = _extract_email_metadata(SAMPLE_MSG_REAL_MAILHOG)
+        assert meta["email_from"] == "tester@example.com"
+        assert meta["email_subject"] == "Invoice test (alias only)"
+
+    def test_structured_from_field(self):
+        msg = {"From": {"Mailbox": "sender", "Domain": "corp.com"}, "Content": {"Headers": {}}}
+        meta = _extract_email_metadata(msg)
+        assert meta["email_from"] == "sender@corp.com"
+
+    def test_from_fallback_to_content_headers(self):
+        msg = {"Content": {"Headers": {"From": ["admin@example.org"], "Subject": ["Re: payment"]}}}
+        meta = _extract_email_metadata(msg)
+        assert meta["email_from"] == "admin@example.org"
+        assert meta["email_subject"] == "Re: payment"
+
+    def test_empty_message_returns_empty(self):
+        meta = _extract_email_metadata({})
+        assert meta["email_from"] == ""
+        assert meta["email_subject"] == ""
+
+    def test_from_with_empty_domain(self):
+        msg = {"From": {"Mailbox": "local", "Domain": ""}, "Content": {"Headers": {}}}
+        meta = _extract_email_metadata(msg)
+        assert meta["email_from"] == "local"
+
+
 # ── poll_and_ingest integration tests (mocked DB + HTTP) ──────────────────────
 
 class TestPollAndIngest:
@@ -212,6 +243,23 @@ class TestPollAndIngest:
         assert run_obj.emails_processed == 1
         assert run_obj.failures_count == 0
         assert run_obj.status == "SUCCESS"
+
+        # Verify the Invoice object has email metadata
+        invoice_obj = None
+        for call in add_calls:
+            obj = call[0][0]
+            if hasattr(obj, "source_message_id") and hasattr(obj, "email_subject"):
+                invoice_obj = obj
+                break
+        assert invoice_obj is not None, "Invoice object not found in db.add calls"
+        assert invoice_obj.attachment_count == 1
+        assert invoice_obj.source_message_id == "msg-001"
+
+        # Verify _save_attachment was called with tenant-scoped args
+        mock_save.assert_called_once()
+        save_kwargs = mock_save.call_args
+        assert save_kwargs[1]["tenant_id"] == "tenant-uuid-1"
+        assert save_kwargs[1]["message_id"] == "msg-001"
 
     @patch("app.workers.email_poller.SessionLocal")
     @patch("app.workers.email_poller.MailHogProvider")

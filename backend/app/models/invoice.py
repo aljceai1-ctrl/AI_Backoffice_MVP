@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from enum import Enum
 
-from sqlalchemy import ForeignKey, Numeric, String, Text, Date
+from sqlalchemy import ForeignKey, Integer, Numeric, String, Text, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -38,6 +38,9 @@ class Invoice(Base):
     original_filename: Mapped[str] = mapped_column(String(500), default="")
     source: Mapped[str] = mapped_column(String(20), default=InvoiceSource.UPLOAD.value)
     source_message_id: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    email_subject: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    email_from: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    attachment_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 

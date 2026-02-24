@@ -1,13 +1,14 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, FileText, Shield, Users, Settings, LogOut, Activity } from 'lucide-react';
+import { LayoutDashboard, FileText, Shield, Users, Settings, LogOut, Activity, ClipboardList } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { cn, isAdmin } from '@/lib/utils';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: null },
   { href: '/invoices', label: 'Invoices', icon: FileText, roles: null },
+  { href: '/review', label: 'Review Queue', icon: ClipboardList, roles: ['ADMIN', 'APPROVER', 'AUDITOR'] },
   { href: '/audit', label: 'Audit Log', icon: Activity, roles: ['ADMIN', 'AUDITOR', 'APPROVER'] },
   { href: '/admin/users', label: 'Users', icon: Users, roles: ['ADMIN'] },
   { href: '/admin/settings', label: 'Settings', icon: Settings, roles: ['ADMIN'] },

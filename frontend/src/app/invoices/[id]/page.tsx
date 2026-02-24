@@ -64,6 +64,15 @@ function InvoiceDetail() {
               <div><p className="text-xs text-gray-500">File</p><p className="text-sm">{inv.original_filename || '—'}</p></div>
               <div><p className="text-xs text-gray-500">Created</p><p className="text-sm">{formatDateTime(inv.created_at)}</p></div>
               <div><p className="text-xs text-gray-500">Updated</p><p className="text-sm">{formatDateTime(inv.updated_at)}</p></div>
+              {inv.source === 'EMAIL' && inv.email_from && (
+                <div><p className="text-xs text-gray-500">From (email)</p><p className="text-sm">{inv.email_from}</p></div>
+              )}
+              {inv.source === 'EMAIL' && inv.email_subject && (
+                <div className="col-span-2"><p className="text-xs text-gray-500">Subject</p><p className="text-sm">{inv.email_subject}</p></div>
+              )}
+              {inv.source === 'EMAIL' && inv.attachment_count > 0 && (
+                <div><p className="text-xs text-gray-500">Attachments</p><p className="text-sm font-medium">{inv.attachment_count}</p></div>
+              )}
             </div>
             {inv.original_filename && (
               <a href={`/api/invoices/${inv.id}/download`} className="btn-secondary mt-4 inline-flex"><Download className="w-4 h-4 mr-2" /> Download File</a>
