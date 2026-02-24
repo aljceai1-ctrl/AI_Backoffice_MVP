@@ -9,7 +9,10 @@ venv/
 
 # Env / secrets
 .env
+.env.*
 !.env.example
+backend/.env
+frontend/.env.local
 
 # Local data
 data/uploads/
